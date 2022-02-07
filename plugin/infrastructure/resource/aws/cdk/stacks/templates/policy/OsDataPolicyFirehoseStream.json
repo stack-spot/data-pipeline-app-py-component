@@ -1,0 +1,130 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+      {
+          "Sid": "",
+          "Effect": "Allow",
+          "Action": [
+              "glue:GetTable",
+              "glue:GetTableVersion",
+              "glue:GetTableVersions"
+          ],
+          "Resource": [
+              "arn:aws:glue:{{AwsRegion}}:{{AwsAccount}}:catalog",
+              "arn:aws:glue:{{AwsRegion}}:{{AwsAccount}}:database/*",
+              "arn:aws:glue:{{AwsRegion}}:{{AwsAccount}}:table/*"
+          ]
+      },
+      {
+          "Sid": "",
+          "Effect": "Allow",
+          "Action": [
+              "s3:AbortMultipartUpload",
+              "s3:GetBucketLocation",
+              "s3:GetObject",
+              "s3:ListBucket",
+              "s3:ListBucketMultipartUploads",
+             "s3:PutObject"
+          ],
+          "Resource": [
+              "arn:aws:s3:::{{BucketRaw}}",
+              "arn:aws:s3:::{{BucketRaw}}/*"
+          ]
+      },
+      {
+        "Effect": "Allow",
+          "Action": [
+              "cloudwatch:PutMetricData",
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+              "logs:DescribeLogStreams"            
+          ],
+          "Resource": [
+              "*"
+          ]
+      },
+      {
+          "Sid": "",
+          "Effect": "Allow",
+          "Action": [
+              "lambda:InvokeFunction",
+              "lambda:GetFunctionConfiguration"
+          ],
+          "Resource": "arn:aws:lambda:{{AwsRegion}}:{{AwsAccount}}:function:*"
+      },
+      {
+          "Effect": "Allow",
+          "Action": [
+              "kms:GenerateDataKey",
+              "kms:Decrypt"
+          ],
+          "Resource": [
+              "arn:aws:kms:{{AwsRegion}}:{{AwsAccount}}:key/*"
+          ],
+          "Condition": {
+              "StringEquals": {
+                  "kms:ViaService": "s3.{{AwsRegion}}.amazonaws.com"
+              },
+              "StringLike": {
+                  "kms:EncryptionContext:aws:s3:arn": [
+                      "arn:aws:s3:::*/*",
+                      "arn:aws:s3:::*"
+                  ]
+              }
+          }
+      },
+      {
+          "Sid": "",
+          "Effect": "Allow",
+          "Action": [
+              "logs:PutLogEvents"
+          ],
+          "Resource": [
+              "arn:aws:logs:{{AwsRegion}}:{{AwsAccount}}:log-group:/aws/kinesisfirehose/{{FirehoseName}}:log-stream:*",
+              "arn:aws:logs:{{AwsRegion}}:{{AwsAccount}}:log-group:*:log-stream:*"
+          ]
+      },
+      {
+          "Sid": "",
+          "Effect": "Allow",
+          "Action": [
+              "kinesis:DescribeStream",
+              "kinesis:GetShardIterator",
+              "kinesis:GetRecords",
+              "kinesis:ListShards"
+          ],
+          "Resource": "arn:aws:kinesis:{{AwsRegion}}:{{AwsAccount}}:stream/{{KinesisName}}"
+      },
+      {
+          "Effect": "Allow",
+          "Action": [
+              "kms:Decrypt"
+          ],
+          "Resource": [
+              "arn:aws:kms:{{AwsRegion}}:{{AwsAccount}}:key/*"
+          ],
+          "Condition": {
+              "StringEquals": {
+                  "kms:ViaService": "kinesis.{{AwsRegion}}.amazonaws.com"
+              },
+              "StringLike": {
+                  "kms:EncryptionContext:aws:kinesis:arn": "arn:aws:kinesis:{{AwsRegion}}:{{AwsAccount}}:stream/{{KinesisName}}"
+              }
+          }
+      },
+      {
+        "Sid": "AWSLogsSchemaRegistryReadonlyAccess",
+        "Effect": "Allow",
+        "Action": [
+            "logs:DescribeLogGroups",
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+        ],
+        "Resource": [
+            "*"
+        ]
+    }
+  ]
+} 

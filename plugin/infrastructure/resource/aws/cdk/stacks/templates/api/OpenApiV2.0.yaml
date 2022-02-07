@@ -1,0 +1,129 @@
+openapi: "3.0.1"
+info:
+  title: "{{api_name}}"
+  description: "API REST para publicar eventos no Data Product"
+  version: "1.0.0"
+  contact:
+    name: Data Mesh API Support
+    url: http://www.datamesh.com/support
+    email: support@datamesh.com
+paths:
+  /v1/events/{dataProduct}/{schemaVersion}/{schema}:
+    post:
+      operationId: "postStream"
+      parameters:
+      - name: "dataProduct"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+          
+      - name: "schema"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      
+      - name: "schemaVersion"
+        in: "path"
+        required: true
+        schema:
+          type: "string"
+      
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataSchemaModel"
+        required: false
+      
+      responses:
+        200:
+          $ref: "#/components/responses/REP-200"
+     
+      security:
+      - sigv4: []
+      - api_key: []
+      tags:
+        - dataschema
+
+      x-amazon-apigateway-integration:
+        type: "aws_proxy"
+        credentials: "{{api_gateway_credentials}}"
+        uri: "{{api_gateway_uri}}"
+        responses:
+          default:
+            statusCode: "200"
+
+        requestTemplates:
+          application/json: '#set($inputRoot = $input.path("$"))
+            #set($msgBody = $util.parseJson($input.body))
+            {
+              "DataProduct" : "$input.params("dataProduct")",
+              "Schema":{
+                "SchemaVersion": "$input.params("schemaVersion")",
+                "SchemaName": "$input.params("schema")"
+              }
+            }'
+        passthroughBehavior: "when_no_templates"
+        httpMethod: "POST"
+
+components:
+  schemas:
+    DataSchemaModel:
+      "$schema": "http://json-schema.org/draft-04/schema#"
+      title": "DataSchemaModel"
+      description": "DataSchemaModel"
+      type: object
+      properties:
+        EventID:
+          type: integer
+        EventTime:
+          type: string
+        EventData:
+          type: object
+      required:
+      - EventID
+      - EventTime
+      - EventData
+
+  securitySchemes:
+    api_key:
+      type: "apiKey"
+      name: "x-api-key"
+      in: "header"
+    sigv4:
+      type: "apiKey"
+      name: "Authorization"
+      in: "header"
+      x-amazon-apigateway-authtype: "awsSigv4"
+  
+  responses:
+    REP-200: 
+        description: "200 response"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+              required:
+                - message
+
+x-amazon-apigateway-policy:
+  Version: "2012-10-17"
+  Statement:
+  - Effect: "Allow"
+    Principal: "*"
+    Action: "execute-api:Invoke"
+    Resource: "{{api_gateway_policy}}"
+  - Effect: "Deny"
+    Principal: "*"
+    Action: "execute-api:Invoke"
+    Resource: "{{api_gateway_policy}}"
+    Condition:
+      StringNotEquals:
+        aws:SourceVpce: "{{aws_vpce}}"
+        aws:sourceVpc: "{{aws_vpc}}"
+

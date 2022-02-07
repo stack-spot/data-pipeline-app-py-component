@@ -1,0 +1,72 @@
+{
+  "type": "record",
+  "name": "sales_by_review",
+  "doc": "Alguma descricao para o Schema",
+  "fields": [
+    {
+      "name": "id_sale",
+      "doc": "id das vendas",
+      "type": [
+        "null",
+        "int"
+      ],
+      "default": null
+    },
+    {
+      "name": "id_customer",
+      "doc": "id do customer",
+      "type": "string"
+    },
+    {
+      "name": "part_name",
+      "doc": "",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "price",
+      "doc": "",
+      "type": "float"
+    },
+    {
+      "name": "test_struct",
+      "type": [
+        "null",
+        {
+          "name": "test_struct",
+          "type": "record",
+          "fields": [
+            {
+              "name": "a",
+              "type": [
+                "null",
+                "long"
+              ],
+              "default": null
+            },
+            {
+              "name": "b",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "c",
+              "type": [
+                "null",
+                "int"
+              ],
+              "default": null
+            }
+          ]
+        }
+      ],
+      "default": null
+    }
+  ]
+}

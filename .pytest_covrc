@@ -1,0 +1,9 @@
+[run]
+omit = 
+    plugin/usecase/datapipeline/files/*
+    tests/plugin/*
+
+[report]
+show_missing = True
+skip_empty = True
+sort = -Cover

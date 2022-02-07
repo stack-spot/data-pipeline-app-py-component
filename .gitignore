@@ -1,0 +1,36 @@
+# Coverage
+**/.coverage
+**/htmlcov
+*.pyc
+.tox
+.mypy_cache
+*/plugin.egg-info
+plugin/utils/logging/log/plugin.log
+
+# Horusec
+.horusec
+tmp
+build
+dist
+reports
+
+# IntelliJ
+.idea
+
+# pytest
+**/.pytest_cache
+**/__pycache__
+pyspark_clean_pipeline.log
+
+# Tox
+.tox
+coverage.xml
+coverage
+lint
+
+# **/*.zip
+**/*.DS_Store
+virtual-env
+.env
+.venv
+venv

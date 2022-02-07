@@ -1,0 +1,5 @@
+[report]
+show_missing = False
+skip_empty = True
+fail_under = 45
+sort = -Cover
