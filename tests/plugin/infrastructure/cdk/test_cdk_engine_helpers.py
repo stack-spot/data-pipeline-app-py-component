@@ -10,6 +10,8 @@ from plugin.infrastructure.resource.aws.cdk.engine.helpers import (
     has_failed_event,
     is_created_resource,
     trace_stack_events)
+
+from plugin.infrastructure.resource.aws.cdk.stacks.helpers import file
 import boto3
 import pytest
 import json
@@ -311,3 +313,12 @@ def test_update_stack(caplog):
     update_stack(cf, stack_name, stack_template)
     stubber.deactivate()
     assert caplog.records[0].message == "CREATE_COMPLETE - resource_id_1 : ..."
+
+@patch("plugin.infrastructure.resource.aws.cdk.stacks.helpers.file.read_plugin_yaml", autospec=True)
+@patch("plugin.infrastructure.resource.aws.cdk.stacks.helpers.file.read_json", autospec=True)
+def test_get_policy_and_role(_read, _read_yml):
+    file.get_policy('policy')
+    file.get_api('api')
+    file.get_role('role')
+    
+    

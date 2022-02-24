@@ -48,7 +48,7 @@ def create_dataschema_pipeline(scope, table: Table, data_pipeline: DataPipeline)
 
     stack_trigger = stack.create_glue_trigger(database_name, table.name)
     stack_trigger.add_depends_on(stack_glue)
-
+    
     scope.deploy(stack_name, data_pipeline.region)
     print(f"{stack_name} deployed")
 

@@ -1,6 +1,7 @@
 [run]
 omit = 
     plugin/usecase/datapipeline/files/*
+    plugin/infrastructure/resource/aws/services/lakeformation/*
     tests/plugin/*
 
 [report]

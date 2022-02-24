@@ -27,8 +27,8 @@ class DataPipeline:
                 logger.info(
                     f'Data Pipeline | Create Dataframe | Creating Datafram from Schema Avro Version {version}v')
                 # pylint: disable=protected-access
-                dfs.append(self.spark._session.read.schema(schema).json(
-                    f's3://{bucket_source}/{path}/*', multiLine=True))
+                dfs.append(self.spark._session.read.schema(schema).option("multiLine", "false").option("mode", "PERMISSIVE").json(
+                    f's3://{bucket_source}/{path}/*'))
                 return dfs
             except Exception as err: # pylint: disable=broad-except
                 DataframesCreateFailed(

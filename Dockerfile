@@ -13,19 +13,18 @@ ENV PYTHONPATH=/src
 
 RUN \
   apt-get update && \
-  apt-get install gnupg wget -y && \
-  echo "deb https://deb.nodesource.com/node_14.x buster main" > /etc/apt/sources.list.d/nodesource.list && \
-  wget -qO- https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
+  apt-get install curl -y && \
+  curl -fsSL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh | sed -e 's/sudo//g' | bash && \
   apt-get update && \
   apt-get install -yqq nodejs && \
   pip install -r requirements.txt && \
   python setup.py install
 
-RUN addgroup --gid 1001 --system orange && \
-  adduser --no-create-home --shell /bin/false --disabled-password --uid 1001 --system --group orange
+RUN addgroup --gid 1001 --system stk && \
+  adduser --no-create-home --shell /bin/false --disabled-password --uid 1001 --system --group stk
 
-RUN chown -R orange:orange /src
-RUN chown -R orange:orange /usr/local/lib/python3.9/site-packages/plugin-*.egg/
-USER orange
+RUN chown -R stk:stk /src
+RUN chown -R stk:stk /usr/local/lib/python3.9/site-packages/plugin-*.egg/
+USER stk
 
 ENTRYPOINT ["data-pipeline"]

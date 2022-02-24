@@ -20,7 +20,6 @@ class DataFlow(cdk.Stack):
 
     def create_database(self, name: str):
         database = glue.Database(self, f"database-{name}", database_name=name)
-
         return database
 
     def create_registry(self, name: str):
@@ -134,7 +133,6 @@ class DataFlow(cdk.Stack):
             )]
         )
 
-
     def create_firehose_role_policy(self, database_name: str, schema_name: str):
         role_name = f"{database_name}-{schema_name}-role-firehose"
         policy_name = f"{database_name}-{schema_name}-firehose-integration"
@@ -201,22 +199,39 @@ class DataFlow(cdk.Stack):
                 prefix='!{partitionKeyFromQuery:dataproduct}/!{partitionKeyFromQuery:schema}/!{partitionKeyFromQuery:version}/!{partitionKeyFromQuery:year}/!{partitionKeyFromQuery:month}/!{partitionKeyFromQuery:day}/',  # pylint: disable=line-too-long
                 processing_configuration=kinesisfirehose.CfnDeliveryStream.ProcessingConfigurationProperty(
                     enabled=True,
-                    processors=[kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
-                        type='RecordDeAggregation',
-                        parameters=[kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
-                            parameter_name='SubRecordType',
-                            parameter_value='JSON'
-                        )]), kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
-                        type='MetadataExtraction',
-                        parameters=[kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
-                            parameter_name='MetadataExtractionQuery',
-                            parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time| strftime("%Y"),month:.event_time| strftime("%m"),day:.event_time| strftime("%d"),dataproduct:.data_product}'  # pylint: disable=line-too-long
-                        ), kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
-                            parameter_name='JsonParsingEngine',
-                            parameter_value='JQ-1.6'
-                        )]
-                    )]
-
+                    processors=[
+                        kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
+                            type='RecordDeAggregation',
+                            parameters=[
+                                kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
+                                    parameter_name='SubRecordType',
+                                    parameter_value='JSON'
+                                )
+                            ]
+                        ),
+                        kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
+                            type='MetadataExtraction',
+                            parameters=[
+                                kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
+                                    parameter_name='MetadataExtractionQuery',
+                                    parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time| strftime("%Y"),month:.event_time| strftime("%m"),day:.event_time| strftime("%d"),dataproduct:.data_product}'  # pylint: disable=line-too-long
+                                ),
+                                kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
+                                    parameter_name='JsonParsingEngine',
+                                    parameter_value='JQ-1.6'
+                                )
+                            ]
+                        ),
+                        kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
+                            type='AppendDelimiterToRecord',
+                            parameters=[
+                                kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
+                                    parameter_name='Delimiter',
+                                    parameter_value='\\n'
+                                )
+                            ]
+                        )
+                    ]
                 ),
                 data_format_conversion_configuration=kinesisfirehose.CfnDeliveryStream.DataFormatConversionConfigurationProperty(
                     enabled=False),

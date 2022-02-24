@@ -46,8 +46,8 @@ docker build -t data-pipeline-plugin:latest .
 docker run \
 -v $PWD/template:/src/template \
 -v $PWD/schemas:/src/schemas \
--v ~/.aws:/home/orange/.aws \
--it data-pipeline-plugin:latest \
+-v ~/.aws:/home/stk/.aws \
+-i data-pipeline-plugin:latest \
 apply data-pipeline -f /src/template/manifest.yaml
 ```
 
