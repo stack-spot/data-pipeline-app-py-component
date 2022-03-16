@@ -41,6 +41,6 @@ class DataClean:
         logger.info(
             'Data Pipeline | Add Partition | Add Patition Key _version and _date')
         self.df = self.df.withColumn(
-            "_date", from_unixtime(col("event_time"), "yyyy-MM-dd"))
+            "_date", from_unixtime(col("event_time")/1000, "yyyy-MM-dd"))
         self.df = self.df.withColumn("_version", lit(version))
         logger.info('Data Pipeline | Add Partition | Success')

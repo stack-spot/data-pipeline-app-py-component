@@ -117,7 +117,7 @@ class TestCdkDataFlow:
                         "Compatibility": "BACKWARD",
                         "DataFormat": "AVRO",
                         "Name": f"{table}_table",
-                        "SchemaDefinition": "{\"type\": \"record\", \"name\": \"schema_mock\", \"doc\": \"mock desc\", \"fields\": [{\"name\": \"event_time\", \"type\": [\"null\", {\"type\": \"int\", \"logicalType\": \"date\"}]}, {\"name\": \"event_id\", \"type\": \"int\"}]}",
+                        "SchemaDefinition": "{\"type\": \"record\", \"name\": \"schema_mock\", \"doc\": \"mock desc\", \"fields\": [{\"name\": \"event_time\", \"type\": [\"null\", \"long\"], \"logicalType\": \"timestamp-millis\", \"default\": null}, {\"name\": \"event_id\", \"type\": \"int\"}]}",
                         "Description": "",
                         "Registry": {
                             "Name": f"{name}"

@@ -95,20 +95,18 @@ class GlueResource(GlueResourceInterface):
                 avro_schema = read_avro_schema(
                     f"{path}/{table_name.removesuffix('_table')}.avsc")
 
-                avro_schema["fields"].extend([{
-                    "name": "event_time",
-                    "type": [
-                        "null",
-                        {
-                            "type": "int",
-                            "logicalType": "date"
-                        }
-                    ]
-                },
+                avro_schema["fields"].extend([
                     {
-                    "name": "event_id",
-                    "type": "int"
-                }])
+                        "name": "event_time",
+                        "type": ["null", "long"],
+                        "logicalType": "timestamp-millis",
+                        "default": None
+                    },
+                    {
+                        "name": "event_id",
+                        "type": "int"
+                    }
+                ])
 
                 schema_definition = json.dumps(avro_schema)
             else:

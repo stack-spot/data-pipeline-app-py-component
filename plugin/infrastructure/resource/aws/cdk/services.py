@@ -1,40 +1,41 @@
 from plugin.domain.manifest import DataPipeline, Table
 from plugin.infrastructure.resource.aws.cdk.stacks import Stack
 from plugin.infrastructure.resource.aws.services.main import SDK
-from plugin.utils.string import get_bucket_name_by_arn
+from plugin.utils.string import get_bucket_name_by_arn, kebab, snake_case
 from plugin.utils.logging import logger
 
 
 def create_dataschema_pipeline(scope, table: Table, data_pipeline: DataPipeline):
     scope.new_app()
-    stack_name = f'create-{data_pipeline.database.name}-{table.name}-pipeline'.replace(
-        '_', '-')
+    s_database_name = snake_case(data_pipeline.database.name)
+    s_table_name = snake_case(table.name)
+    k_database_name = kebab(data_pipeline.database.name)
+    k_table_name = kebab(table.name)
+    stack_name = kebab(f'create-{s_database_name}-{s_table_name}-pipeline')
     stack = Stack(scope.app, stack_name)
-    database_name = data_pipeline.database.name
 
     stack_schema_registry = stack.create_schema_registry(
-        name=database_name,
+        name=s_database_name,
         path=data_pipeline.database.schemas.path,
-        table_name=table.name)
+        table_name=s_table_name)
 
     stack_schema_registry_table = stack.create_schema_registry_table(
-        name=database_name,
+        name=s_database_name,
         path=data_pipeline.database.schemas.path,
-        table_name=table.name)
+        table_name=s_table_name)
 
     bucket_target = get_bucket_name_by_arn(data_pipeline.arn_bucket_target)
     bucket_source = get_bucket_name_by_arn(data_pipeline.arn_bucket_source)
     stack_kinesis = stack.create_kinesis(
-        f"{data_pipeline.database.name}-{table.name}-kinesis", table.name)
+        f"{k_database_name}-{k_table_name}-kinesis", s_table_name)
 
-    stack.create_role_job_glue(data_pipeline, table.name)
+    stack.create_role_job_glue(data_pipeline, s_table_name)
 
-    firehose_role_policy = stack.create_firehose_role_policy(
-        database_name, table.name)
+    firehose_role_policy = stack.create_firehose_role_policy(k_database_name, k_table_name)
     firehose_role_policy.add_depends_on(stack_kinesis)
 
     stack_firehose = stack.create_kinesis_delivery_stream(
-        database_name, data_pipeline.arn_bucket_source, table.name)
+        k_database_name, data_pipeline.arn_bucket_source, k_table_name)
     stack_firehose.add_depends_on(firehose_role_policy)
 
     stack_table = stack.create_database_table(data_pipeline, table)
@@ -43,10 +44,10 @@ def create_dataschema_pipeline(scope, table: Table, data_pipeline: DataPipeline)
     stack_table.add_depends_on(stack_firehose)
 
     stack_glue = stack.create_glue_jobs(
-        bucket_source, bucket_target, database_name, table.name)
+        bucket_source, bucket_target, k_database_name, k_table_name)
     stack_glue.add_depends_on(stack_firehose)
 
-    stack_trigger = stack.create_glue_trigger(database_name, table.name)
+    stack_trigger = stack.create_glue_trigger(k_database_name, k_table_name)
     stack_trigger.add_depends_on(stack_glue)
     
     scope.deploy(stack_name, data_pipeline.region)
@@ -56,15 +57,16 @@ def create_dataschema_pipeline(scope, table: Table, data_pipeline: DataPipeline)
 def update_dataschema_pipeline(table: Table, data_pipeline: DataPipeline):
     cloud_service = SDK()
     bucket_name = get_bucket_name_by_arn(data_pipeline.arn_bucket_target)
-    database_name = data_pipeline.database.name
+    s_database_name = snake_case(data_pipeline.database.name)
+    table_name = snake_case(table.name)
     region = data_pipeline.region
 
     _schema, _schema_table = cloud_service.update_schema_table(
         cloud_service.account_id,
         bucket_name,
-        database_name,
+        s_database_name,
         data_pipeline.database.schemas.path,
-        table.name,
+        table_name,
         region)
 
     if "VersionNumber" in _schema and "VersionNumber" in _schema_table:
@@ -89,36 +91,36 @@ def contains_schema(schemas: list, schema_name: str):
 def create_dataschema_registry_database(scope, data_pipeline: DataPipeline):
     scope.new_app()
     cloud_service = SDK()
-    stack_name = f'create-{data_pipeline.database.name}-database-registry'.replace(
-        '_', '-')
+    s_database_name = snake_case(data_pipeline.database.name)
+    stack_name = kebab(f'create-{s_database_name}-database-registry')
     stack = Stack(scope.app, stack_name)
 
     database_exists = cloud_service.check_database_exists(
         catalog_id=cloud_service.account_id,
-        database_name=data_pipeline.database.name,
+        database_name=s_database_name,
         region=data_pipeline.region
     )
 
     registry_exists = cloud_service.check_registry_exists(
-        registry_name=data_pipeline.database.name,
+        registry_name=s_database_name,
         region=data_pipeline.region
     )
 
     if not database_exists:
         logger.info(
-            "Database '%s' does not exists. Creating...", data_pipeline.database.name)
-        stack.create_database(data_pipeline.database.name)
+            "Database '%s' does not exists. Creating...", s_database_name) 
+        stack.create_database(s_database_name)
     else:
         logger.info("Database '%s' already exists.",
-                    data_pipeline.database.name)
+                    s_database_name)
 
     if not registry_exists:
         logger.info(
-            "Registry '%s' does not exists. Creating...", data_pipeline.database.name)
-        stack.create_registry(data_pipeline.database.name)
+            "Registry '%s' does not exists. Creating...", s_database_name) 
+        stack.create_registry(s_database_name)
     else:
         logger.info("Registry '%s' already exists.",
-                    data_pipeline.database.name)
+                    s_database_name)
 
     if not database_exists or not registry_exists:
         scope.deploy(stack_name, data_pipeline.region)
@@ -128,8 +130,7 @@ def create_dataschema_registry_database(scope, data_pipeline: DataPipeline):
 def add_classifications(scope, data_pipeline: DataPipeline):
     scope.new_app()
     cloud_service = SDK()
-    stack_name = f'add-{data_pipeline.database.name}-taxonomy'.replace(
-        '_', '-')
+    stack_name = kebab(f'add-{data_pipeline.database.name}-taxonomy')
     stack = Stack(scope.app, stack_name)
 
     stack.add_classifications_to_resources(cloud_service,

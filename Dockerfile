@@ -13,6 +13,7 @@ ENV PYTHONPATH=/src
 
 RUN \
   apt-get update && \
+  apt-get upgrade -y && \
   apt-get install curl -y && \
   curl -fsSL https://deb.nodesource.com/setup_16.x -o nodesource_setup.sh | sed -e 's/sudo//g' | bash && \
   apt-get update && \

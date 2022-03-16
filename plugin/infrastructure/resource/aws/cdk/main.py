@@ -1,4 +1,5 @@
 from plugin.domain.manifest import DataPipeline
+from plugin.utils.string import kebab, snake_case
 from .stacks import Stack
 from .services import (
     # add_classifications,
@@ -21,10 +22,11 @@ class AwsCdk(CDKEngine, DataPipelineCloudInterface):
         cloud_service = SDK()
 
         create_dataschema_registry_database(self, data_pipeline)
+        s_registry_name = snake_case(data_pipeline.database.name)
 
         schemas_to_create = [
             _table.name if not cloud_service.check_schema_version(
-                registry_name=data_pipeline.database.name,
+                registry_name=s_registry_name,
                 schema_name=_table.name,
                 region=data_pipeline.region
             ) else None for _table in data_pipeline.database.schemas.tables
@@ -45,8 +47,9 @@ class AwsCdk(CDKEngine, DataPipelineCloudInterface):
     def create_assets(self, data_pipeline: DataPipeline):
         self.new_app()
         cloud_service = SDK()
-        name = f"{cloud_service.account_id}-{data_pipeline.database.name}-data-schema"
-        stack_name = f"create-{name}-datapipeline-assets".replace("_", "-")
+        kname = kebab(data_pipeline.database.name)
+        name = f"{cloud_service.account_id}-{kname}-data-schema"
+        stack_name = kebab(f"create-{kname}-data-schema-datapipeline-assets")
         stack = Stack(self.app, stack_name)
 
         bucket_logs_exist = cloud_service.check_bucket(f"{name}-logs")

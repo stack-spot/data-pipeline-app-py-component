@@ -191,6 +191,7 @@ def read_avro_schema(file: str) -> dict:
 
     file_name = os.path.basename(file)
 
+
     if file_name.removesuffix(".avsc") != table_name:
         logging.error(
             "The file named '%s' must have the same name as the table: '%s.avsc'.", file_name, table_name)

@@ -11,6 +11,7 @@ from plugin.domain.manifest import DataPipeline, Table
 from plugin.infrastructure.resource.aws.cdk.stacks.helpers.file import get_policy, get_role
 from plugin.infrastructure.resource.aws.cdk.stacks.helpers.get_resource import get_bucket_raw, get_firehose, get_kinesis_stream
 from plugin.utils.file import get_schema_definition, interpolate_json_template, read_avro_schema
+from plugin.utils.string import kebab, snake_case
 
 
 class DataFlow(cdk.Stack):
@@ -57,20 +58,18 @@ class DataFlow(cdk.Stack):
 
         schema_definition = read_avro_schema(f"{path}/{table_name}.avsc")
 
-        schema_definition["fields"].extend([{
-            "name": "event_time",
-            "type": [
-                "null",
-                {
-                    "type": "int",
-                    "logicalType": "date"
-                }
-            ]
-        },
+        schema_definition["fields"].extend([
             {
-            "name": "event_id",
-            "type": "int"
-        }])
+                "name": "event_time",
+                "type": ["null", "long"],
+                "logicalType": "timestamp-millis",
+                "default": None
+            },
+            {
+                "name": "event_id",
+                "type": "int"
+            }
+        ])
 
         cfn_schema_registry_table = glue.CfnSchema(
             self,
@@ -90,7 +89,7 @@ class DataFlow(cdk.Stack):
     def create_kinesis(self, name: str, schema_name: str):
         return kinesis.CfnStream(
             self,
-            f"kinesis-{name}-{schema_name}",
+            name,
             shard_count=1,
             name=name,
             retention_period_hours=24,
@@ -101,7 +100,8 @@ class DataFlow(cdk.Stack):
         )
 
     def create_role_job_glue(self, data_pipeline: DataPipeline, schema_name: str):
-        database_name = data_pipeline.database.name
+        k_database_name = kebab(data_pipeline.database.name)
+        k_schema_name = kebab(schema_name)
         bucket_raw = s3.Bucket.from_bucket_arn(
             self, "import-bucket-raw", data_pipeline.arn_bucket_source)
         bucket_clean = s3.Bucket.from_bucket_arn(
@@ -110,26 +110,26 @@ class DataFlow(cdk.Stack):
         policy_json = interpolate_json_template(
             get_policy("OsDataPolicyGlueJobs"),
             {
-                "DatabaseName": database_name,
+                "DatabaseName": snake_case(k_database_name),
                 "TableName": schema_name,
                 "AwsRegion": self.region,
                 "AwsAccount": self.account,
                 "BucketRaw": bucket_raw.bucket_name,
                 "BucketClean": bucket_clean.bucket_name,
                 "BucketPath": bucket_raw.bucket_name,
-                "BucketEventsLogs": f"{self.account}-{database_name}-data-schema-logs",
-                "BucketEventsStaging": f"{self.account}-{database_name}-data-schema-assets"
+                "BucketEventsLogs": f"{self.account}-{k_database_name}-data-schema-logs",
+                "BucketEventsStaging": f"{self.account}-{k_database_name}-data-schema-assets"
             }
         )
         policy_document = iam.PolicyDocument.from_json(policy_json)
         return iam.CfnRole(
             self,
-            f"{database_name}-{schema_name}-job-glue",
-            role_name=f"{database_name}-{schema_name}-role-pipelines",
+            f"{k_database_name}-{k_schema_name}-job-glue",
+            role_name=f"{k_database_name}-{k_schema_name}-role-pipelines",
             assume_role_policy_document=role,
             policies=[iam.CfnRole.PolicyProperty(
                 policy_document=policy_document,
-                policy_name=f"{database_name}-{schema_name}-policy-pipelines"
+                policy_name=f"{k_database_name}-{k_schema_name}-policy-pipelines"
             )]
         )
 
@@ -169,8 +169,8 @@ class DataFlow(cdk.Stack):
         return policy
 
     def create_kinesis_delivery_stream(self, database_name: str, arn_bucket_source: str, schema_name: str):
-        name = f'{database_name}-{schema_name}'
-        stream_name = f"{database_name}-{schema_name}"
+        name = kebab(f'{database_name}-{schema_name}')
+        stream_name = kebab(f"{database_name}-{schema_name}")
         firehose = kinesisfirehose.CfnDeliveryStream(
             self,
             f"kinesis-delivery-stream-{name}",
@@ -214,7 +214,7 @@ class DataFlow(cdk.Stack):
                             parameters=[
                                 kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
                                     parameter_name='MetadataExtractionQuery',
-                                    parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time| strftime("%Y"),month:.event_time| strftime("%m"),day:.event_time| strftime("%d"),dataproduct:.data_product}'  # pylint: disable=line-too-long
+                                    parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time | (. / 1000 | strftime("%Y")),month:.event_time | (. / 1000 | strftime("%m")),day:.event_time | (. / 1000 | strftime("%d")),dataproduct:.data_product}'  # pylint: disable=line-too-long
                                 ),
                                 kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
                                     parameter_name='JsonParsingEngine',
@@ -248,16 +248,16 @@ class DataFlow(cdk.Stack):
         return firehose
 
     def create_database_table(self, data: DataPipeline, table: Table):
-        database_name = data.database.name
+        database_name = snake_case(data.database.name)
         bucket = s3.Bucket.from_bucket_arn(
             self, "import-bucket-target", data.arn_bucket_target)
         return glue.CfnTable(
             self,
-            f"table-{database_name}-{table.name}",
+            kebab(f"table-{database_name}-{table.name}"),
             catalog_id=self.account,
             database_name=database_name,
             table_input=glue.CfnTable.TableInputProperty(
-                name=table.name,
+                name=snake_case(table.name),
                 description="",
                 parameters={
                     "EXTERNAL": "TRUE",
@@ -275,15 +275,15 @@ class DataFlow(cdk.Stack):
                     schema_reference=glue.CfnTable.SchemaReferenceProperty(
                         schema_id=glue.CfnTable.SchemaIdProperty(
                             registry_name=database_name,
-                            schema_name=f"{table.name}_table"
+                            schema_name=snake_case(f"{table.name}_table")
                         ),
                         schema_version_number=1
                     ),
                     input_format="org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
                     output_format="org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-                    location=f"s3://{bucket.bucket_name}/{database_name}/{table.name}/",
+                    location=f"s3://{bucket.bucket_name}/{snake_case(database_name)}/{snake_case(table.name)}/",
                     serde_info=glue.CfnTable.SerdeInfoProperty(
-                        name=f"{table.name}-stream",
+                        name=kebab(f"{table.name}-stream"),
                         parameters={
                             "serialization.format": 1
                         },
@@ -315,7 +315,7 @@ class DataFlow(cdk.Stack):
                 "--spark-event-logs-path": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-logs",
                 "--enable-continuous-cloudwatch-log": "true",
                 "--aws_region": cdk.Stack.of(self).region,
-                "--database": database_name,
+                "--database": snake_case(database_name),
                 "--name": f"{database_name}-{schema_name}-clean",
                 "--packages": "org.apache.spark:spark-avro_2.12:3.1.1",
                 "--region": cdk.Stack.of(self).region,
@@ -323,10 +323,10 @@ class DataFlow(cdk.Stack):
                 "--extra-py-files": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-assets/pipelines.zip",
                 "--extra-jars": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-assets/spark-avro_2.12-3.1.1.jar",
                 "--bucket_source": bucket_source,
-                "--path_staging": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-assets/{database_name}/{schema_name}",
+                "--path_staging": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-assets/{snake_case(database_name)}/{snake_case(schema_name)}",
                 "--bucket_staging": f"s3://{cdk.Stack.of(self).account}-{database_name}-data-schema-assets/tmp",
                 "--bucket_target": bucket_target,
-                "--schema": schema_name
+                "--schema": snake_case(schema_name)
             },
             description="an example Python Shell job",
             execution_property=glue.CfnJob.ExecutionPropertyProperty(

@@ -71,9 +71,11 @@ class DataPipeline:
                             }
                         },
                     {
-                            "name": "event_time",
-                            "type": "int"
-                            },
+                        "name": "event_time",
+                        "type": ["null", "long"],
+                        "logicalType": "timestamp-millis",
+                        "default": None
+                    },
                     {
                             "name": "event_id",
                             "type": "int"
