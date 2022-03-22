@@ -19,3 +19,10 @@ def snake_case(s: str) -> str:
             sub(r"(\s|_|-)+"," ",
                 sub(r"[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+",
                     lambda mo: ' ' + mo.group(0).lower(), s)).split())
+
+def convert_arn_to_kebab(arn: str) -> str:
+    splited = arn.split(":")
+    reversed = splited[::-1]
+    reversed[0] = kebab(reversed[0])
+    source = ":".join(reversed[::-1])
+    return source

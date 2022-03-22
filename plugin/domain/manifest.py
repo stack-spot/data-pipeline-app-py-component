@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from plugin.utils.file import get_filenames, read_yaml, read_avro_schema
-from plugin.utils.string import kebab
+from plugin.utils.string import convert_arn_to_kebab
 
 
 @dataclass
@@ -186,8 +186,8 @@ class Manifest:
     def __build_manifest(input_manifest: dict, tables: list[Table]) -> dict:
         return {
             "region": input_manifest["region"],
-            "arn_bucket_source": kebab(input_manifest["arn_bucket_source"]),
-            "arn_bucket_target": kebab(input_manifest["arn_bucket_target"]),
+            "arn_bucket_source": convert_arn_to_kebab(input_manifest["arn_bucket_source"]),
+            "arn_bucket_target": convert_arn_to_kebab(input_manifest["arn_bucket_target"]),
             "database": Database(
                 name=input_manifest["database"]["name"],
                 schemas=Schemas(
