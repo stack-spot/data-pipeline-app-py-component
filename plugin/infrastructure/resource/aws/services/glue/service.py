@@ -1,11 +1,12 @@
 from __future__ import annotations
-import json
+import boto3
 from typing_extensions import Literal
 from plugin.domain.exceptions import InvalidSchemaVersionException
-from plugin.utils.file import get_schema_definition, read_avro_schema
+from plugin.domain.model import Table
+from plugin.utils.cdk import fields_to_columns
+from plugin.utils.string import kebab, snake_case
 from .interface import GlueResourceInterface
 from botocore.client import ClientError
-import boto3
 from plugin.utils.logging import logger
 
 
@@ -45,14 +46,16 @@ class GlueResource(GlueResourceInterface):
             )
 
             return response["VersionNumber"] if "VersionNumber" in response else None
-        except ClientError as e:
+        except ClientError:
             logger.info(
-                "Could not get latest version from schema '%s' of registry '%s'.\n%s", table_name, registry_name, e)
+                "Could not get latest version from schema '%s' of registry '%s'.", table_name, registry_name)
         return None
 
-    def check_schema_version(self, registry_name: str, table_name: str) -> bool:
+    def check_schema_version(self, registry_name: str, schema_name: str) -> bool:
         try:
-            response = self.get_last_schema_version(registry_name, table_name)
+            logger.info(
+                "Checking if there is any version of schema '%s' in registry '%s'.", schema_name, registry_name)
+            response = self.get_last_schema_version(registry_name, schema_name)
             return response is not None
         except ClientError as e:
             if e.response['Error']['Code'] == 'EntityNotFoundExcetpion':
@@ -89,52 +92,34 @@ class GlueResource(GlueResourceInterface):
         except ClientError:
             return False
 
-    def update_schema_registry(self, path: str, database_name: str, table_name: str) -> dict:
+    def update_schema_registry(self, database_name: str, table: Table) -> dict:
         try:
-            if table_name.endswith("_table"):
-                avro_schema = read_avro_schema(
-                    f"{path}/{table_name.removesuffix('_table')}.avsc")
-
-                avro_schema["fields"].extend([
-                    {
-                        "name": "event_time",
-                        "type": ["null", "long"],
-                        "logicalType": "timestamp-millis",
-                        "default": None
-                    },
-                    {
-                        "name": "event_id",
-                        "type": "int"
-                    }
-                ])
-
-                schema_definition = json.dumps(avro_schema)
-            else:
-                schema_definition = get_schema_definition(path, table_name)
+            schema_definition = table.schema.definition_to_json
 
             if not self.check_schema_version_validity(data_format="AVRO", schema_definition=schema_definition):
                 raise InvalidSchemaVersionException(
-                    f"Invalid schema version '{table_name}.avsc'.")
+                    f"Invalid schema version '{table.name}.avsc'.")
 
             response = self.glue_client.register_schema_version(
                 SchemaId={
-                    'SchemaName': table_name,
+                    'SchemaName': table.name,
                     'RegistryName': database_name
                 },
                 SchemaDefinition=schema_definition
             )
             if ("Status" in response and response["Status"] == "FAILURE"):
                 logger.error(
-                    "An error occurred while trying to registering new version to schema '%s'.", table_name)
-
+                    "An error occurred while trying to registering new version to schema '%s'.", table.name)
             return response
         except ClientError:
             logger.error(
-                "An error occurred while trying to registering new version to schema '%s'.", table_name)
+                "An error occurred while trying to registering new version to schema '%s'.", table.name)
         return {}
 
     def delete_schema_version(self, database_name: str, table_name: str, version: str) -> dict:
         try:
+            logger.info(
+                "Deleting version '%s' of schema '%s'.", version, table_name)
             response = self.glue_client.delete_schema_versions(
                 SchemaId={
                     'SchemaName': table_name,
@@ -149,13 +134,18 @@ class GlueResource(GlueResourceInterface):
                 "An error occurred while trying to delete version '%s' to schema '%s'.", version, table_name)
         return {}
 
-    def update_table(self, account_id: str, bucket_name: str, database_name: str, table_name: str) -> dict:
+    def update_table(self, account_id: str, bucket_name: str, database_name: str, table: Table) -> dict:
         try:
+            logger.info(
+                "Updating table '%s'. . .", table.name)
+
+            columns = fields_to_columns(table.fields)
+
             response = self.glue_client.update_table(
                 CatalogId=account_id,
                 DatabaseName=database_name,
                 TableInput={
-                    "Name": table_name,
+                    "Name": table.name,
                     "Description": "",
                     "Parameters": {
                         "EXTERNAL": "TRUE",
@@ -173,18 +163,18 @@ class GlueResource(GlueResourceInterface):
                         },
                     ],
                     "StorageDescriptor": {
-                        "SchemaReference": {
-                            "SchemaId": {
-                                "RegistryName": database_name,
-                                "SchemaName": f"{table_name}_table"
-                            },
-                            "SchemaVersionNumber": self.get_last_schema_version(database_name, f"{table_name}_table"),
-                        },
+                        'Columns': [
+                            {
+                                'Name': column.name,
+                                'Type': column.type,
+                                'Comment': column.comment
+                            } for column in columns
+                        ],
                         "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
                         "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-                        "Location": f"s3://{bucket_name}/{database_name}/{table_name}/",
+                        "Location": f"s3://{bucket_name}/{snake_case(database_name)}/{snake_case(table.name)}/",
                         "SerdeInfo": {
-                            "Name": f"{table_name}-stream",
+                            "Name": kebab(f"{table.name}-stream"),
                             "Parameters": {
                                     "serialization.format": "1"
                             },
@@ -195,10 +185,8 @@ class GlueResource(GlueResourceInterface):
                 }
             )
 
-            if ("Status" in response and response["Status"] == "FAILURE"):
-                logger.error(
-                    "An error occurred while trying to update the version of '%s' table in the '%s' database", database_name, table_name)
+            return response
         except ClientError as e:
             logger.error(
-                "An error occurred while trying to update the version of '%s' table in the '%s' database\n%s", database_name, table_name, e)
+                "An error occurred while trying to update the version of '%s' table in the '%s' database\n%s", database_name, table.name, e)
         return {}

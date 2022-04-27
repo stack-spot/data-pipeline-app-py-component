@@ -1,5 +1,5 @@
 [report]
 show_missing = False
 skip_empty = True
-fail_under = 45
+fail_under = 75
 sort = -Cover

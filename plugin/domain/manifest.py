@@ -1,113 +1,11 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+import json
+from .helpers.taxonomy import build_classifications
+from .helpers.schema import get_fields_types
+from .model import Database, DataPipeline, Field, Schema, Schemas, Table, TableTrigger
 from plugin.utils.file import get_filenames, read_yaml, read_avro_schema
 from plugin.utils.string import convert_arn_to_kebab
-
-
-@dataclass
-class Taxonomy:
-    """
-    TODO
-    """
-
-    access_level: str = "partial"
-    data_classification: str = ""
-    pii: str = "false"
-    private: str = "false"
-
-    def __post_init__(self):
-        self._is_valid_pii()
-        self._is_valid_private()
-        self._is_valid_data_classification()
-
-    @property
-    def tag_keys(self) -> list:
-        return list(getattr(self.__class__.__bases__[0], '__annotations__', {}).keys())
-
-    def _is_valid_pii(self):
-        if self.pii is not None and self.pii not in ["true", "false"]:
-            raise ValueError(
-                f"'pii' must be boolean type (true/false) not '{self.pii}'")
-
-    def _is_valid_private(self):
-        if self.private is not None and self.private not in ["true", "false"]:
-            raise ValueError(
-                f"'private' must be boolean type (true/false) not '{self.private}'")
-
-    def _is_valid_data_classification(self):
-        if self.data_classification is not None and self.data_classification not in ["business", "technical", ""]:
-            raise ValueError(
-                f"'data_classification' must be 'business' or 'technical' or '' not '{self.data_classification}'")
-
-
-@dataclass
-class Field(Taxonomy):
-    """
-    TODO
-    """
-    name: str = ""
-    type: str = ""
-    description: str = ""
-
-
-@dataclass
-class Table(Taxonomy):
-    """
-    TODO
-    """
-
-    name: str = ""
-    manipulated: str = "false"
-    fields: list[Field] = field(default_factory=list)
-
-    def __post_init__(self):
-        self._is_valid_manipulated()
-
-    @property
-    def tag_keys(self) -> list:
-        return Taxonomy.tag_keys.fget(self) + ['manipulated']
-
-    def _is_valid_manipulated(self):
-        if self.manipulated is not None and self.manipulated not in ["true", "false"]:
-            raise ValueError(
-                f"'manipulated' must be boolean type (true/false) not '{self.manipulated}'")
-
-    @property
-    def get_struct_schema(self):
-        self.fields.append(
-            Field(name="event_time", type="timestamp", access_level="partial"))
-        self.fields.append(
-            Field(name="event_id", type="int", access_level="partial"))
-        return self.fields
-
-
-@dataclass
-class Schemas:
-    """
-    TODO
-    """
-    path: str = "./schemas"
-    tables: list[Table] = field(default_factory=list)
-
-
-@dataclass
-class Database:
-    """
-    TODO
-    """
-    name: str
-    schemas: Schemas
-
-
-@dataclass
-class DataPipeline:
-    """
-    TODO
-    """
-    arn_bucket_source: str
-    arn_bucket_target: str
-    database: Database
-    region: str = "us-east-1"
 
 
 @dataclass
@@ -127,7 +25,7 @@ class Manifest:
             raise TypeError
 
     def __build_domain(self, manifest_dict) -> None:
-        dir_path = Schemas.path 
+        dir_path = Schemas.path
 
         avro_schemas_list = get_filenames(
             directory=dir_path, glob_pattern="*.avsc")
@@ -150,39 +48,6 @@ class Manifest:
         self.data_pipeline = DataPipeline(**data_pipeline)
 
     @staticmethod
-    def __define_access_level(pii: str, private: str) -> str:
-        if pii == "true" and private == "true":
-            return "full"
-
-        if pii == "true":
-            return "sensitive"
-
-        if private == "true":
-            return "restrict"
-
-        return "partial"
-
-    @staticmethod
-    def __build_default_boolean(index: int, _list: list, field_type: str) -> bool:
-
-        if index is None:
-            return False
-
-        if field_type in _list[index]:
-            return _list[index][field_type]
-        return False
-
-    @staticmethod
-    def __build_data_classification(index: int, _list: list) -> str:
-
-        if index is None:
-            return ""
-
-        if "data_classification" in _list[index]:
-            return _list[index]["data_classification"]
-        return ""
-
-    @staticmethod
     def __build_manifest(input_manifest: dict, tables: list[Table]) -> dict:
         return {
             "region": input_manifest["region"],
@@ -190,6 +55,9 @@ class Manifest:
             "arn_bucket_target": convert_arn_to_kebab(input_manifest["arn_bucket_target"]),
             "database": Database(
                 name=input_manifest["database"]["name"],
+                trigger=TableTrigger(
+                    **input_manifest["database"]["trigger"]
+                ) if "trigger" in input_manifest["database"] else None,
                 schemas=Schemas(
                     tables=tables
                 )
@@ -217,53 +85,48 @@ class Manifest:
         input_table = input_manifest_tables[schema_index] if schema_index is not None else {
         }
 
-        pii = str(self.__build_default_boolean(
-            index=schema_index, _list=input_manifest_tables, field_type="pii")).lower()
-        private = str(self.__build_default_boolean(
-            index=schema_index, _list=input_manifest_tables, field_type="private")).lower()
-        manipulated = str(self.__build_default_boolean(
-            index=schema_index, _list=input_manifest_tables, field_type="manipulated")).lower()
-        data_classification = self.__build_data_classification(
-            index=schema_index, _list=input_manifest_tables)
+        classifications = build_classifications(
+            index=schema_index,
+            _list=input_manifest_tables
+        )
+
+        fields_types = get_fields_types(schema=json.dumps(avro_schema))
 
         return Table(
             name=avro_schema["name"],
-            access_level=self.__define_access_level(pii, private),
-            pii=pii,
-            private=private,
-            data_classification=data_classification,
-            manipulated=manipulated,
+            description=avro_schema["doc"] if "doc" in avro_schema else "",
+            access_level=classifications["access_level"],
+            pii=classifications["pii"],
+            private=classifications["private"],
+            data_classification=classifications["data_classification"],
+            manipulated=classifications["manipulated"],
+            schema=Schema(
+                definition=avro_schema
+            ),
             fields=[
-                self.__build_field(_field=avro_field, input_table=input_table) for avro_field in avro_schema["fields"]
+                self.__build_field(
+                    _field=avro_field,
+                    _type=fields_types[avro_field["name"]],
+                    input_table=input_table
+                ) for avro_field in avro_schema["fields"]
             ] if "fields" in avro_schema else []
         )
 
-    @staticmethod
-    def __get_field_type(_type):
-        if isinstance(_type, list):
-            _first = [t for t in _type if t != "null"][0]
-            return _first
-        return _type
-
-    def __build_field(self, _field: dict, input_table: dict) -> Field:
+    def __build_field(self, _field: dict, _type: str, input_table: dict) -> Field:
         input_fields = input_table["fields"] if "fields" in input_table else []
         field_index = self.__contains_field(
             fields=input_fields, field_name=_field["name"])
 
-        pii = str(self.__build_default_boolean(
-            index=field_index, _list=input_fields, field_type="pii")).lower()
-        private = str(self.__build_default_boolean(
-            index=field_index, _list=input_fields, field_type="private")).lower()
-        data_classification = self.__build_data_classification(
+        classifications = build_classifications(
             index=field_index, _list=input_fields)
 
         return Field(
             name=_field["name"],
-            access_level=self.__define_access_level(pii, private),
-            pii=pii,
-            private=private,
-            data_classification=data_classification,
-            type=self.__get_field_type(_field["type"]),
+            access_level=classifications["access_level"],
+            pii=classifications["pii"],
+            private=classifications["private"],
+            data_classification=classifications["data_classification"],
+            type=_type,
             description=_field["doc"] if "doc" in _field else ""
         )
 

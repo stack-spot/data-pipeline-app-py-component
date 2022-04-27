@@ -25,3 +25,15 @@ class SDK(Glue, LakeFormation, S3):
         except ClientError as err:
             logger.error(err)
             sys.exit(1)
+
+    @property
+    def user_arn(self):
+        try:
+            client = boto3.client('sts')
+            return client.get_caller_identity().get('Arn')
+        except UnauthorizedSSOTokenError as sso_error:
+            logger.error(sso_error.fmt)
+            sys.exit(1)
+        except ClientError as err:
+            logger.error(err)
+            sys.exit(1)

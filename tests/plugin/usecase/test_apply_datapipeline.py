@@ -2,8 +2,7 @@ import string
 import random
 import pytest
 from unittest import (mock, TestCase)
-from plugin.usecase.datapipeline.main import DataPipelineUseCase, DataPipeline, plugin_path
-from plugin.usecase.datapipeline.interface import DataPipelineInterface
+from plugin.usecase.datapipeline.main import DataPipelineInterface, DataPipelineUseCase, DataPipeline, plugin_path
 from plugin.domain.manifest import Manifest
 
 
@@ -49,8 +48,8 @@ class ApplyDataPipelineTest(TestCase):
     def test_not_implemented_error(self):
         with pytest.raises(NotImplementedError):
             name = self.__random_string(
-            letter=string.ascii_letters.lower(),
-            size=18)
+                letter=string.ascii_letters.lower(),
+                size=18)
             self.manifest.data_pipeline.database.name = f"{name}-test"
 
             mock_use_case = MockDataPipelineUseCase()

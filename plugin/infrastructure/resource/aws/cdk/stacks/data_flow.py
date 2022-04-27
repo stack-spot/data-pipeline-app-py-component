@@ -1,16 +1,16 @@
-import json
 from aws_cdk import core as cdk
 import aws_cdk.aws_glue as glue
 import aws_cdk.aws_kinesis as kinesis
 import aws_cdk.aws_kinesisfirehose as kinesisfirehose
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_s3 as s3
+import aws_cdk.aws_kms as kms
 
-from plugin.domain.manifest import DataPipeline, Table
-
+from plugin.domain.manifest import DataPipeline, Table, TableTrigger
+from plugin.utils.cdk import fields_to_columns
 from plugin.infrastructure.resource.aws.cdk.stacks.helpers.file import get_policy, get_role
 from plugin.infrastructure.resource.aws.cdk.stacks.helpers.get_resource import get_bucket_raw, get_firehose, get_kinesis_stream
-from plugin.utils.file import get_schema_definition, interpolate_json_template, read_avro_schema
+from plugin.utils.file import interpolate_json_template
 from plugin.utils.string import kebab, snake_case
 
 
@@ -36,55 +36,21 @@ class DataFlow(cdk.Stack):
             ]
         )
 
-    def create_schema_registry(self, name: str, path: str, table_name: str):
+    def create_schema(self, name: str, table: Table):
         cfn_schema_registry = glue.CfnSchema(
             self,
-            f"schema-{table_name}",
+            f"schema-{table.name}",
             compatibility="BACKWARD",
             data_format="AVRO",
-            name=table_name,
-            schema_definition=get_schema_definition(
-                path, table_name
-            ),
-            description="",
+            name=table.name,
+            schema_definition=table.schema.definition_to_json,
+            description=table.description,
             registry=glue.CfnSchema.RegistryProperty(
                 name=name
             )
         )
 
         return cfn_schema_registry
-
-    def create_schema_registry_table(self, name: str, path: str, table_name: str):
-
-        schema_definition = read_avro_schema(f"{path}/{table_name}.avsc")
-
-        schema_definition["fields"].extend([
-            {
-                "name": "event_time",
-                "type": ["null", "long"],
-                "logicalType": "timestamp-millis",
-                "default": None
-            },
-            {
-                "name": "event_id",
-                "type": "int"
-            }
-        ])
-
-        cfn_schema_registry_table = glue.CfnSchema(
-            self,
-            f"schema-{table_name}-table",
-            compatibility="BACKWARD",
-            data_format="AVRO",
-            name=f"{table_name}_table",
-            schema_definition=json.dumps(schema_definition),
-            description="",
-            registry=glue.CfnSchema.RegistryProperty(
-                name=name
-            )
-        )
-
-        return cfn_schema_registry_table
 
     def create_kinesis(self, name: str, schema_name: str):
         return kinesis.CfnStream(
@@ -168,44 +134,46 @@ class DataFlow(cdk.Stack):
         )
         return policy
 
-    def create_kinesis_delivery_stream(self, database_name: str, arn_bucket_source: str, schema_name: str):
+    def create_kinesis_delivery_stream(self, database_name: str, arn_bucket_source: str, schema_name: str, kms = {}):
         name = kebab(f'{database_name}-{schema_name}')
         stream_name = kebab(f"{database_name}-{schema_name}")
         firehose = kinesisfirehose.CfnDeliveryStream(
-            self,
-            f"kinesis-delivery-stream-{name}",
-            delivery_stream_name=f"{database_name}-{schema_name}-delivery",
-            kinesis_stream_source_configuration=kinesisfirehose.CfnDeliveryStream.KinesisStreamSourceConfigurationProperty(
-                kinesis_stream_arn=f'arn:aws:kinesis:{cdk.Stack.of(self).region}:{cdk.Stack.of(self).account}:stream/{stream_name}-kinesis',
-                role_arn=f'arn:aws:iam::{cdk.Stack.of(self).account}:role/{name}-role-firehose',
-            ),
-            extended_s3_destination_configuration=kinesisfirehose.CfnDeliveryStream.ExtendedS3DestinationConfigurationProperty(
-                bucket_arn=arn_bucket_source,
-                role_arn=f'arn:aws:iam::{cdk.Stack.of(self).account}:role/{name}-role-firehose',
-                buffering_hints=kinesisfirehose.CfnDeliveryStream.BufferingHintsProperty(
-                    interval_in_seconds=128,
-                    size_in_m_bs=64
-                ),
-                compression_format='UNCOMPRESSED',
-                cloud_watch_logging_options=kinesisfirehose.CfnDeliveryStream.CloudWatchLoggingOptionsProperty(
-                    enabled=True,
-                    log_group_name=f'/aws/kinesisfirehose/{name}-delivery',
-                    log_stream_name='DestinationDelivery'
-                ),
-                encryption_configuration=kinesisfirehose.CfnDeliveryStream.EncryptionConfigurationProperty(
-                    no_encryption_config='NoEncryption'
-                ),
-                error_output_prefix='error/',
-                prefix='!{partitionKeyFromQuery:dataproduct}/!{partitionKeyFromQuery:schema}/!{partitionKeyFromQuery:version}/!{partitionKeyFromQuery:year}/!{partitionKeyFromQuery:month}/!{partitionKeyFromQuery:day}/',  # pylint: disable=line-too-long
-                processing_configuration=kinesisfirehose.CfnDeliveryStream.ProcessingConfigurationProperty(
-                    enabled=True,
-                    processors=[
-                        kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
-                            type='RecordDeAggregation',
-                            parameters=[
-                                kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
-                                    parameter_name='SubRecordType',
-                                    parameter_value='JSON'
+                self,
+                f"kinesis-delivery-stream-{name}",
+                delivery_stream_name=f"{database_name}-{schema_name}-delivery",
+                kinesis_stream_source_configuration=kinesisfirehose.CfnDeliveryStream.KinesisStreamSourceConfigurationProperty(
+                    kinesis_stream_arn=f'arn:aws:kinesis:{cdk.Stack.of(self).region}:{cdk.Stack.of(self).account}:stream/{stream_name}-kinesis',
+                    role_arn=f'arn:aws:iam::{cdk.Stack.of(self).account}:role/{name}-role-firehose',
+                    ),
+                extended_s3_destination_configuration=kinesisfirehose.CfnDeliveryStream.ExtendedS3DestinationConfigurationProperty(
+                    bucket_arn=arn_bucket_source,
+                    role_arn=f'arn:aws:iam::{cdk.Stack.of(self).account}:role/{name}-role-firehose',
+                    buffering_hints=kinesisfirehose.CfnDeliveryStream.BufferingHintsProperty(
+                        interval_in_seconds=128,
+                        size_in_m_bs=64
+                        ),
+                    compression_format='UNCOMPRESSED',
+                    cloud_watch_logging_options=kinesisfirehose.CfnDeliveryStream.CloudWatchLoggingOptionsProperty(
+                        enabled=True,
+                        log_group_name=f'/aws/kinesisfirehose/{name}-delivery',
+                        log_stream_name='DestinationDelivery'
+                        ),
+                    encryption_configuration=kinesisfirehose.CfnDeliveryStream.EncryptionConfigurationProperty(
+                        kms_encryption_config=kinesisfirehose.CfnDeliveryStream.KMSEncryptionConfigProperty(
+                            awskms_key_arn=kms.attr_arn
+                            ),
+                        ),
+                    error_output_prefix='error/',
+                    prefix='!{partitionKeyFromQuery:dataproduct}/!{partitionKeyFromQuery:schema}/!{partitionKeyFromQuery:version}/!{partitionKeyFromQuery:year}/!{partitionKeyFromQuery:month}/!{partitionKeyFromQuery:day}/',  # pylint: disable=line-too-long
+                    processing_configuration=kinesisfirehose.CfnDeliveryStream.ProcessingConfigurationProperty(
+                        enabled=True,
+                        processors=[
+                            kinesisfirehose.CfnDeliveryStream.ProcessorProperty(
+                                type='RecordDeAggregation',
+                                parameters=[
+                                    kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
+                                        parameter_name='SubRecordType',
+                                        parameter_value='JSON'
                                 )
                             ]
                         ),
@@ -214,7 +182,7 @@ class DataFlow(cdk.Stack):
                             parameters=[
                                 kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
                                     parameter_name='MetadataExtractionQuery',
-                                    parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time | (. / 1000 | strftime("%Y")),month:.event_time | (. / 1000 | strftime("%m")),day:.event_time | (. / 1000 | strftime("%d")),dataproduct:.data_product}'  # pylint: disable=line-too-long
+                                    parameter_value='{schema:.schema_name,version:.schema_version,year:.event_time | (. / 1000 | strftime("%Y")),month:.event_time | (. / 1000 | strftime("%m")),day:.event_time | (. / 1000 | strftime("%d")),dataproduct:.data_product}' # pylint: disable=line-too-long
                                 ),
                                 kinesisfirehose.CfnDeliveryStream.ProcessorParameterProperty(
                                     parameter_name='JsonParsingEngine',
@@ -251,6 +219,8 @@ class DataFlow(cdk.Stack):
         database_name = snake_case(data.database.name)
         bucket = s3.Bucket.from_bucket_arn(
             self, "import-bucket-target", data.arn_bucket_target)
+        columns = fields_to_columns(table.fields)
+
         return glue.CfnTable(
             self,
             kebab(f"table-{database_name}-{table.name}"),
@@ -258,27 +228,24 @@ class DataFlow(cdk.Stack):
             database_name=database_name,
             table_input=glue.CfnTable.TableInputProperty(
                 name=snake_case(table.name),
-                description="",
+                description=table.description,
                 parameters={
                     "EXTERNAL": "TRUE",
                     "parquet.compression": "SNAPPY",
                     "classification": "parquet"
                 },
-                partition_keys=[glue.CfnTable.ColumnProperty(
-                    name="_version",
-                    type="int"
-                ), glue.CfnTable.ColumnProperty(
-                    name="_date",
-                    type="date"
-                )],
-                storage_descriptor=glue.CfnTable.StorageDescriptorProperty(
-                    schema_reference=glue.CfnTable.SchemaReferenceProperty(
-                        schema_id=glue.CfnTable.SchemaIdProperty(
-                            registry_name=database_name,
-                            schema_name=snake_case(f"{table.name}_table")
-                        ),
-                        schema_version_number=1
+                partition_keys=[
+                    glue.CfnTable.ColumnProperty(
+                        name="_version",
+                        type="int"
                     ),
+                    glue.CfnTable.ColumnProperty(
+                        name="_date",
+                        type="date"
+                    )
+                ],
+                storage_descriptor=glue.CfnTable.StorageDescriptorProperty(
+                    columns=columns,
                     input_format="org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
                     output_format="org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
                     location=f"s3://{bucket.bucket_name}/{snake_case(database_name)}/{snake_case(table.name)}/",
@@ -340,24 +307,65 @@ class DataFlow(cdk.Stack):
             worker_type="Standard"
         )
 
-    def create_glue_trigger(self, database_name: str, schema_name: str):
+    def create_glue_trigger(self, database_name: str, schema_name: str, trigger: TableTrigger):
+        if trigger == 'ON_DEMAND':
+            return glue.CfnTrigger(
+                self,
+                f"glue-trigger-{database_name}-{schema_name}-clean",
+                actions=[glue.CfnTrigger.ActionProperty(
+                    job_name=f"{database_name}-{schema_name}-clean"
+                )],
+                type=trigger.type,
+                description=f"trigger {trigger.type}",
+                name=f"{database_name}-{schema_name}-clean-trigger"
+            )
+
         return glue.CfnTrigger(
             self,
             f"glue-trigger-{database_name}-{schema_name}-clean",
             actions=[glue.CfnTrigger.ActionProperty(
                 job_name=f"{database_name}-{schema_name}-clean"
             )],
-            type="SCHEDULED",
-            schedule="cron(*/30 * * * ? *)",
-            description="trigger on demand",
+            type=trigger.type,
+            schedule=trigger.cron,
+            description=f"trigger {trigger.type}",
             name=f"{database_name}-{schema_name}-clean-trigger"
         )
 
-    def create_bucket_assets(self, name: str):
-        return s3.Bucket(
+
+    def create_bucket_assets(self, name: str, kms={}):
+        bucket = s3.CfnBucket(
             self,
-            id=f'dp-{name}',
+            id=f"dp-{name}",
             bucket_name=name,
-            encryption=s3.BucketEncryption.S3_MANAGED,
-            versioned=False
+            bucket_encryption=s3.CfnBucket.BucketEncryptionProperty(
+                server_side_encryption_configuration=[
+                    s3.CfnBucket.ServerSideEncryptionRuleProperty(
+                        server_side_encryption_by_default=s3.CfnBucket.
+                        ServerSideEncryptionByDefaultProperty(
+                            sse_algorithm="aws:kms",
+                            kms_master_key_id=cdk.Fn.ref(kms.logical_id)
+                        )
+                    )
+                ]
+            ),
         )
+        bucket.apply_removal_policy(
+            default=cdk.RemovalPolicy.DESTROY
+        )
+
+
+    def create_kms(self, name: str, user_arn: str):
+        policy_json = interpolate_json_template(
+                get_policy("OsPolicyKMS"),
+                {
+                    "AwsAccount": cdk.Stack.of(self).account,
+                    "UserArn": user_arn
+                    }
+                )
+        return kms.CfnKey(self, f"{name}", 
+                key_policy=policy_json,
+                enabled=True,
+                key_spec="SYMMETRIC_DEFAULT",
+                multi_region=False)
+

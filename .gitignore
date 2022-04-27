@@ -7,6 +7,9 @@
 */plugin.egg-info
 plugin/utils/logging/log/plugin.log
 .metals
+.vscode
+schemas/
+template/
 
 # Horusec
 .horusec

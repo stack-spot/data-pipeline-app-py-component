@@ -7,5 +7,5 @@ class GlueResourceInterface(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def check_schema_version(self, registry_name: str, table_name: str) -> bool:
+    def check_schema_version(self, registry_name: str, schema_name: str) -> bool:
         raise NotImplementedError

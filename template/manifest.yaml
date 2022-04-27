@@ -1,9 +1,11 @@
 data-pipeline:
   region: us-east-1
-  arn_bucket_source: arn:aws:s3:::328531315820-raw-datalake
-  arn_bucket_target: arn:aws:s3:::328531315820-clean-datalake
+  arn_bucket_source: arn:aws:s3:::<account_id>-raw-<datalake>
+  arn_bucket_target: arn:aws:s3:::<account_id>-clean-<datalake>
   database:
-    name: datalake
+    name: <datalake>
+    trigger:
+      type: SCHEDULED
+      cron: cron(*/30 * * * ? *)
     schemas:
       path: ./template
-

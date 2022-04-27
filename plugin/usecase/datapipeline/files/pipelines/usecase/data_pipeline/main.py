@@ -30,7 +30,7 @@ class DataPipeline:
                 dfs.append(self.spark._session.read.schema(schema).option("multiLine", "false").option("mode", "PERMISSIVE").json(
                     f's3://{bucket_source}/{path}/*'))
                 return dfs
-            except Exception as err: # pylint: disable=broad-except
+            except Exception as err:  # pylint: disable=broad-except
                 DataframesCreateFailed(
                     logger, f'Dataframe Creation Failed Using S3 path: {bucket_source} Error: {err}')
         else:
@@ -62,36 +62,35 @@ class DataPipeline:
                 "type": "record",
                 "namespace": "com.acme.avro",
                 "fields": [
-                        {
+                    {
+                        "name": "event_data",
+                        "type": {
                             "name": "event_data",
-                            "type": {
-                                "name": "event_data",
-                                "type": "record",
-                                "fields": schema_registry['fields']
-                            }
-                        },
+                            "type": "record",
+                            "fields": schema_registry['fields']
+                        }
+                    },
                     {
                         "name": "event_time",
                         "type": ["null", "long"],
-                        "logicalType": "timestamp-millis",
                         "default": None
                     },
                     {
-                            "name": "event_id",
-                            "type": "int"
-                            },
+                        "name": "event_id",
+                        "type": "int"
+                    },
                     {
-                            "name": "schema_version",
-                            "type": "string"
-                            },
+                        "name": "schema_version",
+                        "type": "string"
+                    },
                     {
-                            "name": "schema_name",
-                            "type": "string"
-                            },
+                        "name": "schema_name",
+                        "type": "string"
+                    },
                     {
-                            "name": "data_product",
-                            "type": "string"
-                            }
+                        "name": "data_product",
+                        "type": "string"
+                    }
                 ]
             }
             logger.info(

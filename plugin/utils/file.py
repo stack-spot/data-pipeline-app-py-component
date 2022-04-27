@@ -10,6 +10,7 @@ import sys
 import zipfile
 import subprocess
 
+
 class ZipUtilities:
     """
     TO DO
@@ -42,6 +43,7 @@ class ZipUtilities:
 
 def get_current_pwd():
     return os.getcwd()
+
 
 def create_job_package(folder: str, output_zip: str):
 
@@ -82,7 +84,7 @@ def install_lambda_dependencies(target: str):
         "--target",
         target
     ])
-    
+
 
 def remove_from_os(path: str):
     if os.path.exists(path):
@@ -178,19 +180,11 @@ def interpolate_json_template(template, data: dict):
         sys.exit(0)
 
 
-def get_schema_definition(path: str, table_name: str) -> str:
-    schema_definition = json.dumps(
-        read_avro_schema(f"{path}/{table_name}.avsc"))
-
-    return schema_definition
-
-
 def read_avro_schema(file: str) -> dict:
     avro_schema = read_json(file)
     table_name = avro_schema.get('name', None)
 
     file_name = os.path.basename(file)
-
 
     if file_name.removesuffix(".avsc") != table_name:
         logging.error(

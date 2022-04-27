@@ -16,8 +16,8 @@ class MockGlueResource(GlueResourceInterface):
     def __init__(self) -> None:
         pass
 
-    def check_schema_version(self, registry_name: str, table_name: str) -> bool:
-        return super().check_schema_version(registry_name, table_name)
+    def check_schema_version(self, registry_name: str, schema_name: str) -> bool:
+        return super().check_schema_version(registry_name, schema_name)
 
 
 class S3ResourceTest(TestCase):
@@ -51,10 +51,9 @@ class S3ResourceTest(TestCase):
 
             glue.check_schema_version(
                 registry_name=self.manifest.data_pipeline.database.name,
-                table_name=self.manifest.data_pipeline.database.schemas.tables[0].name
+                schema_name=self.manifest.data_pipeline.database.schemas.tables[0].name
             )
 
-    
     def mock_check_schema_version_validity(self, path: str, table_name: dict):
         response = {
             'Valid': True,
@@ -98,4 +97,3 @@ class S3ResourceTest(TestCase):
             data_format="AVRO",
             schema_definition=json.dumps(schema_definition)
         )
-

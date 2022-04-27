@@ -28,6 +28,9 @@ class AddTaxonomy(TestCase):
                 "arn_bucket_target": "arn:aws:s3:::328531315820-clean-flowers",
                 "database": {
                     "name": "flowers",
+                    "trigger":{
+                      "type": "ON_DEMAND"
+                    },
                     "schemas": {
                         "path": "./template",
                         "tables": []

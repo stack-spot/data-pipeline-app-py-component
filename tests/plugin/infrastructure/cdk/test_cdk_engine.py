@@ -225,8 +225,9 @@ class CDKEngineTest(TestCase, CDKEngine):
         my_stack = "my-stack"
         stack = Stack(self.app, my_stack)
 
+        kms = stack.create_kms("test-kms", "arn::kms")
         stack.create_bucket_assets(
-            name="my-bucket-to-put-assets")
+                name="my-bucket-to-put-assets", kms=kms)
 
         self.mock_cf.create_stack.side_effect = [
             self.mock_create_stack(
@@ -284,8 +285,10 @@ class CDKEngineTest(TestCase, CDKEngine):
         my_stack = "my-stack"
         stack = Stack(self.app, my_stack)
 
+        kms = stack.create_kms("test-kms", "arn::kms")
+
         stack.create_bucket_assets(
-            name="my-bucket-to-put-assets")
+            name="my-bucket-to-put-assets", kms=kms)
 
         mock_cf.create_stack.side_effect = [
             self.get_exception_from_create_stack(
@@ -314,9 +317,10 @@ class CDKEngineTest(TestCase, CDKEngine):
         self.new_app()
         my_stack = "my-stack"
         stack = Stack(self.app, my_stack)
+        kms = stack.create_kms("test-kms", "arn::kms")
 
         stack.create_bucket_assets(
-            name="my-bucket-to-put-assets")
+            name="my-bucket-to-put-assets", kms=kms)
 
         mock_cf.create_stack.side_effect = [
             self.get_exception_from_create_stack(
